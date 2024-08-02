@@ -6,6 +6,9 @@ from pkg_resources import resource_filename
 
 from flip import fisher, utils
 from flip.covariance import covariance
+from astropy.cosmology import FlatLambdaCDM
+
+import matplotlib.pyplot as plt
 
 def main():
     flip_base = resource_filename("flip", ".")
@@ -17,6 +20,9 @@ def main():
     sn_data = sn_data[np.array(sn_data["status"]) != False]
     sn_data = sn_data[np.array(sn_data["status"]) != None]
     coordinates_velocity = np.array([sn_data["ra"], sn_data["dec"], sn_data["rcom_zobs"], sn_data["zobs"]])
+
+    # plt.hist(sn_data["zobs"])
+    # plt.show()
 
     data_velocity = sn_data.to_dict("list")
     for key in data_velocity.keys():
@@ -87,8 +93,12 @@ def main():
     )
     return parameter_name_list, fisher_matrix
 
-def dlnDdOm0(parameter_values_dict):
-    a=(1/(1+0.05))
+def lnD(a, parameter_values_dict):
+        f0 = parameter_values_dict["Om0"]**parameter_values_dict["gamma"]
+        return np.log(a)*(f0+f0*3*parameter_values_dict["gamma"]*(1-parameter_values_dict["Om0"])) \
+            + (1-a)*f0*3*parameter_values_dict["gamma"]*(1-parameter_values_dict["Om0"])
+
+def dlnDdOm0(a, parameter_values_dict):
     lna=np.log(a)
     return (
         parameter_values_dict["gamma"] * parameter_values_dict["Om0"]**(parameter_values_dict["gamma"]-1) *
@@ -99,8 +109,7 @@ def dlnDdOm0(parameter_values_dict):
             )
         )
 
-def dlnDdgamma(parameter_values_dict):
-    a=(1/(1+0.05))
+def dlnDdgamma(a, parameter_values_dict):
     lna=np.log(a)
     f0 = parameter_values_dict["Om0"]**parameter_values_dict["gamma"]
     return (
@@ -115,18 +124,26 @@ def dlnDdgamma(parameter_values_dict):
         )
 
 if __name__ == "__main__":
+
+
     parameter_dict = {
+        "fs8": 0.4290817234945532,
         "Om0": 0.3,
         "gamma": 0.55,
         "sigv": 200,        
         "sigma_M": 0.12,
     }
+    z_mn=0.05
+
+    cosmo = FlatLambdaCDM(H0=100, Om0=parameter_dict["Om0"])
+    Om=cosmo.Om(z_mn)
+
     parameter_name_list, fisher_matrix = main()
     cov = np.linalg.inv(fisher_matrix[0:2,0:2])
 
     s80 = 0.832
     partials = s80*np.array([parameter_dict['gamma']*parameter_dict['Om0']**(parameter_dict['gamma']-1),np.log(parameter_dict['Om0'])*parameter_dict['Om0']**parameter_dict['gamma']])
-    partials = partials + parameter_dict['Om0']**parameter_dict['gamma'] *s80 * np.array([dlnDdOm0(parameter_dict), dlnDdgamma(parameter_dict)])
-
-    print(np.sqrt(partials.T @ cov[0:2,0:2] @ partials))
-    print(1/np.sqrt(fisher_matrix[2,2]))
+    partials = partials + parameter_dict['Om0']**parameter_dict['gamma'] *s80 * np.array([dlnDdOm0(1., parameter_dict), dlnDdgamma(1., parameter_dict)])
+    print(parameter_dict["Om0"]**parameter_dict['gamma'] * s80, np.sqrt(partials.T @ cov[0:2,0:2] @ partials))
+    # print((Om/parameter_dict["Om0"])**parameter_dict['gamma']*np.exp(lnD(1/(1+z_mn), parameter_dict)))
+    print(parameter_dict["fs8"], 1/np.sqrt(fisher_matrix[2,2]))
